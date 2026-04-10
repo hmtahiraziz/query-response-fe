@@ -1,6 +1,16 @@
-const base = () =>
-  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) ||
-  "http://127.0.0.1:8000";
+let loggedApiBase = false;
+
+const base = () => {
+  const raw =
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL?.trim()) ||
+    "http://127.0.0.1:8000";
+  const url = raw.replace(/\/+$/, "");
+  if (process.env.NODE_ENV === "development" && !loggedApiBase) {
+    loggedApiBase = true;
+    console.info("[frontend] Backend API URL:", url);
+  }
+  return url;
+};
 
 export type ProjectSummary = {
   project_id: string;
