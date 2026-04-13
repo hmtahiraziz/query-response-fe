@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { refineCoverLetter, type SourceSnippet } from "@/lib/api";
+import { logClientApiError, refineCoverLetter, type SourceSnippet } from "@/lib/api";
 
 export type RefineAppliedMeta = {
   instruction: string;
@@ -51,6 +51,7 @@ export default function RefineWithAi({
       });
       onApplied(res.cover_letter, res.sources, { instruction: ins });
     } catch (e) {
+      logClientApiError("RefineWithAi: refineCoverLetter", e);
       setRefineErr(e instanceof Error ? e.message : "Refinement failed");
     } finally {
       setRefining(false);
