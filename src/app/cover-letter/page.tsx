@@ -10,6 +10,7 @@ import {
   fetchProjects,
   fetchServerInfo,
   generateCoverLetter,
+  logClientApiError,
   patchCoverLetterHistory,
   type CoverLetterHistorySummary,
   type ServerInfo,
@@ -237,6 +238,7 @@ export default function CoverLetterPage() {
       setServerHistoryId(res.history_id);
       await refresh();
     } catch (err) {
+      logClientApiError("cover letter page: generate", err);
       setGenErr(err instanceof Error ? err.message : "Generation failed");
     } finally {
       if (genTimerRef.current) {
@@ -594,6 +596,9 @@ export default function CoverLetterPage() {
                       await refresh();
                       highlightHistoryId = serverHistoryId;
                     } catch (e) {
+                      logClientApiError("cover letter page: persist refine to history", e, {
+                        serverHistoryId,
+                      });
                       alert(
                         e instanceof Error
                           ? `${e.message} — draft updated locally only.`
