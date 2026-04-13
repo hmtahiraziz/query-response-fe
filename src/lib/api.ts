@@ -1,5 +1,14 @@
 let loggedApiBase = false;
 
+/** Browser console: full error for debugging (LLM/API/network failures). */
+export function logClientApiError(context: string, err: unknown, meta?: Record<string, unknown>): void {
+  if (meta && Object.keys(meta).length > 0) {
+    console.error(`[frontend:api] ${context}`, meta, err);
+  } else {
+    console.error(`[frontend:api] ${context}`, err);
+  }
+}
+
 const base = () => {
   const raw =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL?.trim()) ||
@@ -26,6 +35,8 @@ export type ServerInfo = {
   cover_letter_history_backend?: "mongodb" | "json_file";
   /** Where global + chat assistant rules are stored */
   assistant_rules_backend?: "mongodb" | "json_file";
+  /** Where ingested project metadata (library list) is stored */
+  projects_backend?: "mongodb" | "json_file";
   gemini_chat_model: string;
   gemini_embed_model: string;
   /** Server-side max attempts on 429 / quota (chat + embeddings) */
@@ -155,11 +166,18 @@ export async function generateCoverLetter(
   query: string,
   k?: number
 ): Promise<{ cover_letter: string; sources: SourceSnippet[]; history_id: string }> {
-  const r = await fetch(`${base()}/generate/cover-letter`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, k: k ?? null }),
-  });
+  const url = `${base()}/generate/cover-letter`;
+  let r: Response;
+  try {
+    r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, k: k ?? null }),
+    });
+  } catch (err) {
+    logClientApiError("generateCoverLetter: fetch failed (network or CORS)", err, { url });
+    throw err;
+  }
   if (!r.ok) {
     let detail = await r.text();
     try {
@@ -168,9 +186,21 @@ export async function generateCoverLetter(
     } catch {
       /* keep */
     }
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    const message = typeof detail === "string" ? detail : JSON.stringify(detail);
+    logClientApiError("generateCoverLetter: HTTP error", new Error(message), {
+      url: r.url || url,
+      status: r.status,
+      statusText: r.statusText,
+      detail,
+    });
+    throw new Error(message);
   }
-  return r.json();
+  try {
+    return await r.json();
+  } catch (err) {
+    logClientApiError("generateCoverLetter: invalid JSON body", err, { url: r.url || url, status: r.status });
+    throw err;
+  }
 }
 
 export async function refineCoverLetter(body: {
@@ -180,17 +210,24 @@ export async function refineCoverLetter(body: {
   selection?: string | null;
   k?: number | null;
 }): Promise<{ cover_letter: string; sources: SourceSnippet[] }> {
-  const r = await fetch(`${base()}/generate/cover-letter/refine`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_query: body.client_query,
-      cover_letter: body.cover_letter,
-      instruction: body.instruction,
-      selection: body.selection?.trim() ? body.selection.trim() : null,
-      k: body.k ?? null,
-    }),
-  });
+  const url = `${base()}/generate/cover-letter/refine`;
+  let r: Response;
+  try {
+    r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_query: body.client_query,
+        cover_letter: body.cover_letter,
+        instruction: body.instruction,
+        selection: body.selection?.trim() ? body.selection.trim() : null,
+        k: body.k ?? null,
+      }),
+    });
+  } catch (err) {
+    logClientApiError("refineCoverLetter: fetch failed (network or CORS)", err, { url });
+    throw err;
+  }
   if (!r.ok) {
     let detail = await r.text();
     try {
@@ -199,9 +236,21 @@ export async function refineCoverLetter(body: {
     } catch {
       /* keep */
     }
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    const message = typeof detail === "string" ? detail : JSON.stringify(detail);
+    logClientApiError("refineCoverLetter: HTTP error", new Error(message), {
+      url: r.url || url,
+      status: r.status,
+      statusText: r.statusText,
+      detail,
+    });
+    throw new Error(message);
   }
-  return r.json();
+  try {
+    return await r.json();
+  } catch (err) {
+    logClientApiError("refineCoverLetter: invalid JSON body", err, { url: r.url || url, status: r.status });
+    throw err;
+  }
 }
 
 export async function fetchCoverLetterHistory(): Promise<CoverLetterHistorySummary[]> {

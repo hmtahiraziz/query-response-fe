@@ -21,11 +21,18 @@ export default function ServerInfoPanel({ info, loadErr, variant = "full" }: Pro
   const show = (key: string) => {
     if (variant === "full") return true;
     if (variant === "ingest")
-      return ["gemini_embed_model", "pinecone_index", "chunk_size", "chunk_overlap"].includes(key);
+      return [
+        "projects_backend",
+        "gemini_embed_model",
+        "pinecone_index",
+        "chunk_size",
+        "chunk_overlap",
+      ].includes(key);
     if (variant === "compose")
       return [
         "cover_letter_history_backend",
         "assistant_rules_backend",
+        "projects_backend",
         "gemini_chat_model",
         "gemini_embed_model",
         "pinecone_index",
@@ -50,6 +57,14 @@ export default function ServerInfoPanel({ info, loadErr, variant = "full" }: Pro
           <dt className="inline text-[var(--text)]">Rules storage</dt>{" "}
           <dd className="inline">
             {info.assistant_rules_backend === "mongodb" ? "MongoDB" : "Local JSON file"}
+          </dd>
+        </div>
+      )}
+      {show("projects_backend") && info.projects_backend && (
+        <div>
+          <dt className="inline text-[var(--text)]">Project library storage</dt>{" "}
+          <dd className="inline">
+            {info.projects_backend === "mongodb" ? "MongoDB" : "Local JSON file"}
           </dd>
         </div>
       )}
