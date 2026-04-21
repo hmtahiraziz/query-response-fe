@@ -1,19 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import AssistantRulesPanel from "@/components/AssistantRulesPanel";
-import ServerInfoPanel from "@/components/ServerInfoPanel";
 import {
   deleteCoverLetterHistoryEntry,
   fetchCoverLetterHistory,
   fetchCoverLetterHistoryEntry,
   fetchProjects,
-  fetchServerInfo,
   generateCoverLetter,
   logClientApiError,
   patchCoverLetterHistory,
   type CoverLetterHistorySummary,
-  type ServerInfo,
   type SourceSnippet,
 } from "@/lib/api";
 import {
@@ -28,9 +24,9 @@ import RefineWithAi from "@/components/RefineWithAi";
 import { formatHistoryDate } from "@/lib/format";
 
 const GENERATE_HINTS = [
-  "Retrieving relevant portfolio chunks from Pinecone…",
-  "Calling Gemini to draft your letter…",
-  "If Google rate-limits, the server waits and retries automatically (can add time)…",
+  "Retrieving relevant portfolio context from Pinecone…",
+  "Calling OpenAI to draft your letter…",
+  "If OpenAI rate-limits, the server waits and retries automatically (can add time)…",
   "Still working — large briefs or quota backoff can take a minute or more…",
 ] as const;
 
@@ -39,7 +35,6 @@ function newId(): string {
 }
 
 export default function CoverLetterPage() {
-  const [info, setInfo] = useState<ServerInfo | null>(null);
   const [projectCount, setProjectCount] = useState(0);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
@@ -47,7 +42,6 @@ export default function CoverLetterPage() {
   const genHintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [query, setQuery] = useState("");
-  const [kChunks, setKChunks] = useState<number | "">("");
   const [generating, setGenerating] = useState(false);
   const [genHintIndex, setGenHintIndex] = useState(0);
   const [genElapsed, setGenElapsed] = useState(0);
@@ -75,9 +69,8 @@ export default function CoverLetterPage() {
   const refresh = useCallback(async () => {
     setLoadErr(null);
     try {
-      const [p, i] = await Promise.all([fetchProjects(), fetchServerInfo()]);
+      const p = await fetchProjects();
       setProjectCount(p.length);
-      setInfo(i);
       try {
         setCoverHistory(await fetchCoverLetterHistory());
       } catch {
@@ -115,7 +108,6 @@ export default function CoverLetterPage() {
           const d = await fetchCoverLetterHistoryEntry(saved.serverHistoryId);
           const vers = detailToDraftVersions(d);
           setQuery(d.query);
-          setKChunks(d.k ?? "");
           setSources(d.sources);
           setDraftVersions(vers);
           const pick =
@@ -131,7 +123,6 @@ export default function CoverLetterPage() {
       }
       if (saved.draftVersions.length > 0) {
         setQuery(saved.query);
-        setKChunks(saved.kChunks ?? "");
         setSources(saved.sources);
         setDraftVersions(saved.draftVersions);
         setActiveVersionId(saved.activeVersionId);
@@ -224,8 +215,7 @@ export default function CoverLetterPage() {
     }, 8000);
 
     try {
-      const kk = kChunks === "" ? undefined : Number(kChunks);
-      const res = await generateCoverLetter(query, kk);
+      const res = await generateCoverLetter(query);
       const initialId = `${res.history_id}-initial`;
       setDraftVersions([
         { id: initialId, createdAt: Date.now(), source: "generate", body: res.cover_letter },
@@ -264,7 +254,6 @@ export default function CoverLetterPage() {
       setEditorValue(last.body);
       setMarkdownEditorOpen(false);
       setSources(d.sources);
-      setKChunks(d.k ?? "");
       setViewingHistoryId(d.id);
       setServerHistoryId(d.id);
       setGenErr(null);
@@ -297,7 +286,6 @@ export default function CoverLetterPage() {
     setActiveVersionId(null);
     setEditorValue("");
     setSources([]);
-    setKChunks("");
     setViewingHistoryId(null);
     setServerHistoryId(null);
     setGenErr(null);
@@ -313,7 +301,6 @@ export default function CoverLetterPage() {
         serverHistoryId,
         viewingHistoryId,
         query,
-        kChunks,
         sources,
         draftVersions,
         activeVersionId,
@@ -326,7 +313,6 @@ export default function CoverLetterPage() {
     serverHistoryId,
     viewingHistoryId,
     query,
-    kChunks,
     sources,
     draftVersions,
     activeVersionId,
@@ -340,61 +326,100 @@ export default function CoverLetterPage() {
         aria-label="Cover letter history"
       >
         <div className="flex min-h-0 flex-1 flex-col md:max-h-[calc(100vh-3.5rem)]">
-          <div className="shrink-0 border-b border-[var(--border)] px-4 py-3">
-            <div className="flex items-start justify-between gap-2">
+          <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg)]/40 px-4 py-3.5">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-medium text-[var(--text)]">History</h2>
-                <p className="mt-0.5 text-xs text-[var(--muted)]">{coverHistory.length} saved on server</p>
+                <h2 className="text-sm font-semibold tracking-tight text-[var(--text)]">Saved drafts</h2>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                  {coverHistory.length === 0
+                    ? "Nothing saved yet"
+                    : `${coverHistory.length} on server — tap a row to open`}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={startNewDraft}
-                className="shrink-0 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-dim)] px-2.5 py-1 text-[11px] font-medium text-[var(--accent)] hover:border-[var(--accent)]"
+                className="shrink-0 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-dim)] px-3 py-1.5 text-xs font-medium text-[var(--on-accent)] shadow-sm transition hover:border-[var(--accent)] hover:brightness-[1.02] active:scale-[0.98]"
                 aria-label="Start a new cover letter draft"
               >
                 New draft
               </button>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 md:px-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3 md:px-3.5 md:py-4">
             {coverHistory.length === 0 ? (
-              <p className="text-sm text-[var(--faint)]">No drafts yet. Generate one in the editor →</p>
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg)]/50 px-3 py-6 text-center">
+                <p className="text-sm text-[var(--muted)]">No drafts yet.</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-[var(--faint)]">
+                  Generate a letter in the editor — it will appear here automatically.
+                </p>
+              </div>
             ) : (
-              <ul className="space-y-2">
-                {coverHistory.map((h) => (
-                  <li
-                    key={h.id}
-                    className={`rounded-lg border p-2.5 ${
-                      viewingHistoryId === h.id
-                        ? "border-[var(--accent)]/50 bg-[var(--accent-dim)]"
-                        : "border-[var(--border)] bg-[var(--bg)]"
-                    }`}
-                  >
-                    <p className="text-[10px] uppercase tracking-wide text-[var(--faint)]">
-                      {formatHistoryDate(h.created_at)}
-                    </p>
-                    <p className="mt-1 line-clamp-3 text-xs leading-snug text-[var(--text)]">{h.query_preview}</p>
-                    {h.k != null && (
-                      <p className="mt-1 text-[10px] text-[var(--muted)]">k={h.k}</p>
-                    )}
-                    <div className="mt-2 flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => void openHistoryEntry(h.id)}
-                        className="rounded border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--accent)] hover:border-[var(--accent)]"
+              <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+                {coverHistory.map((h) => {
+                  const selected = viewingHistoryId === h.id;
+                  const dateLabel = formatHistoryDate(h.created_at);
+                  return (
+                    <li key={h.id}>
+                      <div
+                        className={`flex overflow-hidden rounded-xl border transition-colors ${
+                          selected
+                            ? "border-[var(--accent)]/45 bg-[var(--accent-dim)] shadow-[inset_3px_0_0_0_var(--accent)] ring-1 ring-[var(--accent)]/12"
+                            : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--accent)]/22 hover:bg-[var(--surface)]"
+                        }`}
                       >
-                        Open
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void removeHistoryEntry(h.id)}
-                        className="rounded border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--muted)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
-                      >
-                        Del
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                        <button
+                          type="button"
+                          onClick={() => void openHistoryEntry(h.id)}
+                          className={`min-w-0 flex-1 px-3 py-2.5 text-left outline-none transition focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-[var(--accent)]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] ${
+                            selected ? "text-[var(--on-accent)]" : "text-[var(--text)]"
+                          }`}
+                          aria-current={selected ? "true" : undefined}
+                          aria-label={`Open draft from ${dateLabel}`}
+                        >
+                          <p
+                            className={`text-[10px] font-medium uppercase tracking-wider ${
+                              selected ? "text-[var(--on-accent)]/60" : "text-[var(--faint)]"
+                            }`}
+                          >
+                            {dateLabel}
+                          </p>
+                          <p
+                            className={`mt-1.5 line-clamp-3 text-xs leading-snug ${
+                              selected ? "text-[var(--on-accent)]" : "text-[var(--text)]"
+                            }`}
+                          >
+                            {h.query_preview}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeHistoryEntry(h.id)}
+                          className={`flex w-11 shrink-0 items-center justify-center border-l outline-none transition focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]/40 ${
+                            selected
+                              ? "border-[var(--on-accent)]/15 bg-[var(--accent-dim)] text-[var(--on-accent)]/70 hover:bg-red-500/15 hover:text-[var(--danger)]"
+                              : "border-[var(--border)] bg-[var(--surface)]/60 text-[var(--muted)] hover:bg-red-500/10 hover:text-[var(--danger)]"
+                          }`}
+                          aria-label={`Delete draft from ${dateLabel}`}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            className="h-4 w-4"
+                            aria-hidden
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.614.163-1.201.435-1.75.82V5.5a.75.75 0 0 0 1.5 0v-.443c.472-.281.998-.45 1.57-.512A2.251 2.251 0 0 1 9.25 6.007v.93h4.5V6.007a2.25 2.25 0 0 1 .93-1.832 2.25 2.25 0 0 1 1.43-.512V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM12 4.978v-.93a.75.75 0 0 0-.75-.75H8.75a.75.75 0 0 0-.75.75v.93h4ZM6.5 6.978V16.5A1.5 1.5 0 0 0 8 18h4a1.5 1.5 0 0 0 1.5-1.5V6.978h-7Zm2.25 1.5a.75.75 0 0 1 .75.75V15a.75.75 0 0 1-1.5 0V9.228a.75.75 0 0 1 .75-.75Zm3.75-.75a.75.75 0 0 0-1.5 0V15a.75.75 0 0 0 1.5 0V9.228Z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -409,17 +434,11 @@ export default function CoverLetterPage() {
             drafts a grounded response you can refine.
           </p>
           {projectCount === 0 && !loadErr && (
-            <p className="mt-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">
-              No projects indexed yet — go to <strong>Portfolio library</strong> and upload at least one PDF before
-              generating.
+            <p className="mt-4 rounded-lg border border-[var(--accent)]/35 bg-[var(--accent-dim)] px-3 py-2 text-sm text-[var(--on-accent)]">
+              No OpenAI-indexed projects yet — go to <strong className="font-semibold text-[var(--on-accent)]">Portfolio library</strong> and upload at least one PDF
+              (legacy Gemini entries are not used for generation).
             </p>
           )}
-          <div className="mt-6">
-            <ServerInfoPanel info={info} loadErr={loadErr} variant="compose" />
-          </div>
-          <div className="mt-4">
-            <AssistantRulesPanel storageBackend={info?.assistant_rules_backend} />
-          </div>
         </header>
 
         <form
@@ -442,10 +461,10 @@ export default function CoverLetterPage() {
                 aria-hidden
               />
               <div className="min-w-0 flex-1 space-y-1">
-                <p className="text-sm font-medium text-[var(--text)]">Generating cover letter</p>
-                <p className="text-sm text-[var(--muted)]">{GENERATE_HINTS[genHintIndex]}</p>
-                <p className="text-xs text-[var(--muted)]">Elapsed {genElapsed}s</p>
-                <p className="text-xs text-[var(--faint)]">
+                <p className="text-sm font-medium text-[var(--on-accent)]">Generating cover letter</p>
+                <p className="text-sm text-[var(--on-accent)]/80">{GENERATE_HINTS[genHintIndex]}</p>
+                <p className="text-xs text-[var(--on-accent)]/70">Elapsed {genElapsed}s</p>
+                <p className="text-xs text-[var(--on-accent)]/55">
                   Retries on rate limits run on the server (not shown one-by-one here). Long waits usually mean backoff
                   or a large brief.
                 </p>
@@ -461,26 +480,10 @@ export default function CoverLetterPage() {
             placeholder="Paste the role description, requirements, and what the client wants built…"
             className="w-full resize-y rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm leading-relaxed text-[var(--text)] outline-none focus:border-[var(--accent)] disabled:opacity-50"
           />
-          <label className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
-            Chunks to retrieve (optional)
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={kChunks}
-              disabled={generating}
-              onChange={(e) => {
-                const v = e.target.value;
-                setKChunks(v === "" ? "" : Number(v));
-              }}
-              placeholder="default"
-              className="w-24 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[var(--text)] disabled:opacity-50"
-            />
-          </label>
           <button
             type="submit"
             disabled={generating || query.trim().length < 10 || projectCount === 0}
-            className="w-full rounded-lg border border-[var(--accent)] bg-[var(--accent-dim)] py-2.5 text-sm font-medium text-[var(--accent)] disabled:opacity-40"
+            className="w-full rounded-lg border border-[var(--accent)] bg-[var(--accent-dim)] py-2.5 text-sm font-medium text-[var(--on-accent)] disabled:opacity-40"
           >
             {generating ? "Working…" : "Generate cover letter"}
           </button>
@@ -542,7 +545,7 @@ export default function CoverLetterPage() {
                   type="button"
                   disabled={!isDirty || editorValue.trim().length < 10 || savingManualVersion}
                   onClick={() => void saveManualVersion()}
-                  className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] disabled:opacity-40"
+                  className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-3 py-1.5 text-xs font-medium text-[var(--on-accent)] disabled:opacity-40"
                 >
                   {savingManualVersion ? "Saving…" : "Save as new version"}
                 </button>
@@ -556,7 +559,7 @@ export default function CoverLetterPage() {
                 </button>
               </div>
               {isDirty && (
-                <p className="mt-2 text-xs text-amber-200/80">
+                <p className="mt-2 text-xs text-[var(--accent-soft)]/90">
                   {markdownEditorOpen
                     ? "Unsaved edits — save or discard before switching version."
                     : "Unsaved edits in the markdown source — open Edit markdown to continue, or save / discard here."}
@@ -576,7 +579,6 @@ export default function CoverLetterPage() {
             <RefineWithAi
               clientQuery={query}
               draft={editorValue}
-              kChunks={kChunks}
               formBusy={generating}
               onApplied={(nextLetter, nextSources, meta) => {
                 void (async () => {
@@ -626,7 +628,7 @@ export default function CoverLetterPage() {
             />
             {sources.length > 0 && (
               <details className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 text-sm">
-                <summary className="cursor-pointer text-[var(--muted)]">Sources ({sources.length} chunks)</summary>
+                <summary className="cursor-pointer text-[var(--muted)]">Sources ({sources.length})</summary>
                 <ul className="mt-3 space-y-3">
                   {sources.map((s, i) => (
                     <li

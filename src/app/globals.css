@@ -1,16 +1,21 @@
 @import "tailwindcss";
 
+/* Brand: black canvas + electric purple (aligned with marketing hero reference) */
 :root {
-  --bg: #0c0e11;
-  --surface: #14181f;
-  --surface-hover: #1a1f29;
-  --border: #2a3140;
-  --text: #e8eaef;
-  --muted: #8b93a4;
-  --faint: #5c6478;
-  --accent: #e8b86d;
-  --accent-dim: rgba(232, 184, 109, 0.15);
-  --danger: #e07a7a;
+  --bg: #000000;
+  --surface: #0c0c10;
+  --surface-hover: #14141f;
+  --border: #2a2438;
+  --text: #ffffff;
+  --muted: #a89fc4;
+  --faint: #6f6688;
+  --accent: #6236ff;
+  --accent-hover: #7b52ff;
+  --accent-dim: rgba(98, 54, 255, 0.28);
+  --accent-glow: rgba(98, 54, 255, 0.35);
+  --accent-soft: #c4b5fd;
+  --on-accent: #ffffff;
+  --danger: #f87171;
 }
 
 html {
@@ -18,7 +23,11 @@ html {
 }
 
 body {
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 90% 60% at 88% 8%, var(--accent-glow), transparent 52%),
+    radial-gradient(ellipse 55% 45% at 6% 92%, rgba(98, 54, 255, 0.14), transparent 48%);
+  background-attachment: fixed;
   color: var(--text);
   min-height: 100vh;
 }
@@ -28,6 +37,22 @@ body {
 }
 
 ::selection {
-  background: var(--accent-dim);
-  color: var(--text);
+  background: rgba(98, 54, 255, 0.45);
+  color: var(--on-accent);
+}
+
+/* Portfolio ingest toast: bottom bar shrinks over the auto-dismiss duration */
+@keyframes ingest-toast-dismiss {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.ingest-toast-progress {
+  animation-name: ingest-toast-dismiss;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
 }

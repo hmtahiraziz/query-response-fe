@@ -6,7 +6,6 @@ node_modules/
 out/
 
 # Environment
-.env
 .env*.local
 
 # OS / editor
@@ -17,3 +16,4 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+config.bat

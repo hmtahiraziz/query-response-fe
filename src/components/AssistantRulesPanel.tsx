@@ -1,32 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchAssistantRules, saveAssistantRules } from "@/lib/api";
-import { formatHistoryDate } from "@/lib/format";
+import { fetchAssistantRules, type AssistantRules } from "@/lib/api";
 
-type AssistantRulesPanelProps = {
-  /** From GET /server/info — where rules are persisted */
-  storageBackend?: "mongodb" | "json_file";
-};
+function BulletList({ title, items }: { title: string; items: string[] }) {
+  const filtered = items.map((s) => s.trim()).filter(Boolean);
+  if (filtered.length === 0) return null;
+  return (
+    <div>
+      <h4 className="text-sm font-semibold text-[var(--text)]">{title}</h4>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--muted)]">
+        {filtered.map((line, i) => (
+          <li key={i}>{line}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
-export default function AssistantRulesPanel({ storageBackend }: AssistantRulesPanelProps) {
-  const [globalRules, setGlobalRules] = useState("");
-  const [chatRules, setChatRules] = useState("");
-  const [updatedAt, setUpdatedAt] = useState(0);
+export default function AssistantRulesPanel() {
+  const [rules, setRules] = useState<AssistantRules | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [saveOk, setSaveOk] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     setErr(null);
     void fetchAssistantRules()
-      .then((d) => {
-        setGlobalRules(d.global_rules);
-        setChatRules(d.chat_rules);
-        setUpdatedAt(d.updated_at);
-      })
+      .then(setRules)
       .catch((e) => {
         setErr(e instanceof Error ? e.message : "Could not load assistant rules");
       })
@@ -37,96 +38,77 @@ export default function AssistantRulesPanel({ storageBackend }: AssistantRulesPa
     load();
   }, [load]);
 
-  const onSave = async () => {
-    setSaving(true);
-    setSaveOk(false);
-    setErr(null);
-    try {
-      const d = await saveAssistantRules({ global_rules: globalRules, chat_rules: chatRules });
-      setGlobalRules(d.global_rules);
-      setChatRules(d.chat_rules);
-      setUpdatedAt(d.updated_at);
-      setSaveOk(true);
-      window.setTimeout(() => setSaveOk(false), 2500);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const storageLabel =
-    storageBackend === "mongodb"
-      ? "MongoDB"
-      : storageBackend === "json_file"
-        ? "Local file (server data/assistant_rules.json)"
-        : "Server default";
-
   return (
-    <details className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[var(--text)] marker:content-none [&::-webkit-details-marker]:hidden">
-        <span className="text-[var(--accent)]">▸</span> Assistant rules
-        <span className="ml-2 font-normal text-[var(--muted)]">· {storageLabel}</span>
-      </summary>
-      <div className="space-y-3 border-t border-[var(--border)] px-4 py-4">
-        <p className="text-xs leading-relaxed text-[var(--muted)]">
-          These instructions are prepended into every <strong className="font-medium text-[var(--text)]">generate</strong>{" "}
-          and <strong className="font-medium text-[var(--text)]">refine</strong> prompt.{" "}
-          <span className="text-[var(--faint)]">Global</span> applies across all drafts;{" "}
-          <span className="text-[var(--faint)]">Chat</span> is an additional block (e.g. tone, language, formatting).
-        </p>
-        {loading ? (
-          <p className="text-sm text-[var(--muted)]">Loading rules…</p>
-        ) : err ? (
-          <div className="rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-sm text-[var(--danger)]">
-            <p>{err}</p>
-            <button
-              type="button"
-              onClick={() => load()}
-              className="mt-2 text-xs font-medium text-[var(--accent)] underline-offset-2 hover:underline"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <>
-            <label className="block text-sm font-medium text-[var(--text)]">
-              Global rules
-              <textarea
-                value={globalRules}
-                onChange={(e) => setGlobalRules(e.target.value)}
-                rows={4}
-                placeholder="e.g. Always keep a professional but warm tone. Never invent client names or metrics."
-                className="mt-1 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm leading-relaxed text-[var(--text)] outline-none focus:border-[var(--accent)]"
-              />
-            </label>
-            <label className="block text-sm font-medium text-[var(--text)]">
-              Chat rules
-              <textarea
-                value={chatRules}
-                onChange={(e) => setChatRules(e.target.value)}
-                rows={4}
-                placeholder="e.g. Prefer UK spelling. End with a short call-to-action."
-                className="mt-1 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm leading-relaxed text-[var(--text)] outline-none focus:border-[var(--accent)]"
-              />
-            </label>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void onSave()}
-                className="rounded-lg border border-[var(--accent)] bg-[var(--accent-dim)] px-4 py-2 text-sm font-medium text-[var(--accent)] disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save rules"}
-              </button>
-              {updatedAt > 0 ? (
-                <span className="text-xs text-[var(--muted)]">Last saved {formatHistoryDate(updatedAt)}</span>
-              ) : null}
-              {saveOk ? <span className="text-xs font-medium text-emerald-400/90">Saved</span> : null}
-            </div>
-          </>
-        )}
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-[var(--text)]">Assistant rules</h3>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
+            Rules are defined as JSON in the backend repository (
+            <code className="rounded bg-black/25 px-1 py-0.5 font-mono text-xs">{rules?.rules_path ?? "app/rules/…"}</code>
+            ). Edit that file and redeploy (or restart the API in dev) to change tone, composition, grounding, formatting,
+            and structured policy. There is nothing to save from this screen.
+          </p>
+        </div>
+        <span className="inline-flex w-fit shrink-0 items-center rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1 text-xs font-medium text-[var(--muted)]">
+          Source: <span className="ml-1 text-[var(--text)]">bundled JSON</span>
+        </span>
       </div>
-    </details>
+
+      {loading ? (
+        <p className="text-sm text-[var(--muted)]">Loading rules…</p>
+      ) : err ? (
+        <div className="rounded-xl border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-4 py-3 text-sm text-[var(--danger)]">
+          <p>{err}</p>
+          <button
+            type="button"
+            onClick={() => load()}
+            className="mt-3 rounded-md border border-[var(--danger)]/50 px-3 py-1.5 text-xs font-medium text-[var(--danger)] transition hover:bg-[var(--danger)]/15"
+          >
+            Retry
+          </button>
+        </div>
+      ) : rules ? (
+        <>
+          <p className="text-xs text-[var(--faint)]">Bundle version: {rules.version}</p>
+
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/40 p-4 sm:p-5">
+            <h4 className="text-sm font-semibold text-[var(--text)]">Structured policy</h4>
+            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-[var(--faint)]">Language</dt>
+                <dd className="text-[var(--muted)]">{rules.policy.language}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-[var(--faint)]">Max words</dt>
+                <dd className="text-[var(--muted)]">{rules.policy.max_words != null ? rules.policy.max_words : "—"}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs uppercase tracking-wide text-[var(--faint)]">Must include</dt>
+                <dd className="text-[var(--muted)]">
+                  {rules.policy.must_include.length ? rules.policy.must_include.join(" · ") : "—"}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs uppercase tracking-wide text-[var(--faint)]">Must not include</dt>
+                <dd className="text-[var(--muted)]">
+                  {rules.policy.must_not_include.length ? rules.policy.must_not_include.join(" · ") : "—"}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--bg)]/40 p-4 sm:p-5">
+            <h4 className="text-sm font-semibold text-[var(--text)]">Generation rules</h4>
+            <div className="space-y-5">
+              <BulletList title="Tone and voice" items={rules.generation.tone_and_voice} />
+              <BulletList title="Composition" items={rules.generation.composition} />
+              <BulletList title="Factual grounding" items={rules.generation.factual_grounding} />
+              <BulletList title="Formatting" items={rules.generation.formatting} />
+            </div>
+          </section>
+        </>
+      ) : null}
+    </div>
   );
 }
