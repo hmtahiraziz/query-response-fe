@@ -23,7 +23,7 @@ export default function ServerInfoPanel({ info, loadErr, variant = "full" }: Pro
     if (variant === "ingest")
       return [
         "projects_backend",
-        "gemini_embed_model",
+        "openai_embed_model",
         "pinecone_index",
         "chunk_size",
         "chunk_overlap",
@@ -31,13 +31,12 @@ export default function ServerInfoPanel({ info, loadErr, variant = "full" }: Pro
     if (variant === "compose")
       return [
         "cover_letter_history_backend",
-        "assistant_rules_backend",
+        "assistant_rules_source",
         "projects_backend",
-        "gemini_chat_model",
-        "gemini_embed_model",
+        "openai_chat_model",
+        "openai_embed_model",
         "pinecone_index",
-        "default_rag_k",
-        "gemini_max_retries",
+        "openai_max_retries",
       ].includes(key);
     return true;
   };
@@ -52,11 +51,11 @@ export default function ServerInfoPanel({ info, loadErr, variant = "full" }: Pro
           </dd>
         </div>
       )}
-      {show("assistant_rules_backend") && info.assistant_rules_backend && (
+      {show("assistant_rules_source") && info.assistant_rules_source && (
         <div>
-          <dt className="inline text-[var(--text)]">Rules storage</dt>{" "}
+          <dt className="inline text-[var(--text)]">Assistant rules</dt>{" "}
           <dd className="inline">
-            {info.assistant_rules_backend === "mongodb" ? "MongoDB" : "Local JSON file"}
+            {info.assistant_rules_source === "bundled_json" ? "Bundled JSON (repo)" : info.assistant_rules_source}
           </dd>
         </div>
       )}
@@ -68,15 +67,19 @@ export default function ServerInfoPanel({ info, loadErr, variant = "full" }: Pro
           </dd>
         </div>
       )}
-      {show("gemini_chat_model") && (
+      {show("openai_chat_model") && (
         <div>
-          <dt className="inline text-[var(--text)]">Chat model</dt> <dd className="inline">{info.gemini_chat_model}</dd>
+          <dt className="inline text-[var(--text)]">Chat model</dt>{" "}
+          <dd className="inline">{info.openai_chat_model}</dd>
         </div>
       )}
-      {show("gemini_embed_model") && (
+      {show("openai_embed_model") && (
         <div>
           <dt className="inline text-[var(--text)]">Embed model</dt>{" "}
-          <dd className="inline">{info.gemini_embed_model}</dd>
+          <dd className="inline">
+            {info.openai_embed_model}
+            {info.openai_embed_dimensions != null ? ` (${info.openai_embed_dimensions}d)` : ""}
+          </dd>
         </div>
       )}
       {show("pinecone_index") && (
@@ -95,19 +98,13 @@ export default function ServerInfoPanel({ info, loadErr, variant = "full" }: Pro
           </dd>
         </div>
       )}
-      {show("default_rag_k") && (
-        <div>
-          <dt className="inline text-[var(--text)]">Default chunks</dt>{" "}
-          <dd className="inline">{info.default_rag_k}</dd>
-        </div>
-      )}
-      {show("gemini_max_retries") && info.gemini_max_retries != null && (
+      {show("openai_max_retries") && info.openai_max_retries != null && (
         <div>
           <dt className="inline text-[var(--text)]">API retries (429)</dt>{" "}
           <dd className="inline">
-            up to {info.gemini_max_retries} attempts
-            {info.gemini_retry_cap_seconds != null
-              ? ` · max ${info.gemini_retry_cap_seconds}s wait per retry`
+            up to {info.openai_max_retries} attempts
+            {info.openai_retry_cap_seconds != null
+              ? ` · max ${info.openai_retry_cap_seconds}s wait per retry`
               : ""}
           </dd>
         </div>
