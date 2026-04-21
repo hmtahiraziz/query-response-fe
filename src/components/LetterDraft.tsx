@@ -174,7 +174,7 @@ export default function LetterDraft({
           type="button"
           disabled={pdfBusy}
           onClick={() => void buildPreview()}
-          className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] disabled:opacity-50"
+          className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-3 py-1.5 text-xs font-medium text-[var(--on-accent)] disabled:opacity-50"
         >
           {pdfBusy ? "Building PDF…" : previewUrl ? "Rebuild PDF preview" : "Build PDF preview"}
         </button>
@@ -191,7 +191,7 @@ export default function LetterDraft({
             <button
               type="button"
               onClick={onOpenMarkdownEditor}
-              className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-3 py-1.5 text-xs font-medium text-[var(--accent)]"
+              className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-3 py-1.5 text-xs font-medium text-[var(--on-accent)]"
             >
               Edit markdown
             </button>

@@ -28,21 +28,39 @@ export type ProjectSummary = {
   chunks: number;
   pages: number;
   created_at: number;
+  ai_summary: ProjectAISummary | null;
+  summary_generated_at: number | null;
+  /** Which API produced vectors in Pinecone for this upload */
+  embedding_provider: "gemini" | "openai";
+};
+
+export type ProjectAISummary = {
+  name: string;
+  type: string[];
+  problem: string;
+  solution: string;
+  project_brief: string;
+  technical_depth: string;
+  stack: string[];
+  impact: string;
+  talking_points: string[];
+  live_link: string | null;
 };
 
 export type ServerInfo = {
   /** Where cover letter sidebar history is stored */
   cover_letter_history_backend?: "mongodb" | "json_file";
-  /** Where global + chat assistant rules are stored */
-  assistant_rules_backend?: "mongodb" | "json_file";
+  /** Cover-letter assistant rules: shipped JSON in backend repo */
+  assistant_rules_source?: "bundled_json";
   /** Where ingested project metadata (library list) is stored */
   projects_backend?: "mongodb" | "json_file";
-  gemini_chat_model: string;
-  gemini_embed_model: string;
+  openai_chat_model: string;
+  openai_embed_model: string;
+  openai_embed_dimensions?: number;
   /** Server-side max attempts on 429 / quota (chat + embeddings) */
-  gemini_max_retries?: number;
+  openai_max_retries?: number;
   /** Max seconds between retries (server caps API “retry in Xs” hints) */
-  gemini_retry_cap_seconds?: number;
+  openai_retry_cap_seconds?: number;
   pinecone_index: string;
   pinecone_namespace: string;
   chunk_size: number;
@@ -63,37 +81,33 @@ export async function fetchServerInfo(): Promise<ServerInfo> {
   return r.json();
 }
 
+export type AssistantPolicy = {
+  language: "none" | "uk" | "us";
+  max_words: number | null;
+  must_include: string[];
+  must_not_include: string[];
+};
+
+export type GenerationCodeRules = {
+  tone_and_voice: string[];
+  composition: string[];
+  factual_grounding: string[];
+  formatting: string[];
+};
+
 export type AssistantRules = {
-  global_rules: string;
-  chat_rules: string;
-  updated_at: number;
+  source: "code";
+  rules_path: string;
+  version: number;
+  policy: AssistantPolicy;
+  generation: GenerationCodeRules;
+  /** Full bundled rules payload (persona, hard_constraints, …) when returned by the API */
+  bundle?: Record<string, unknown>;
 };
 
 export async function fetchAssistantRules(): Promise<AssistantRules> {
   const r = await fetch(`${base()}/assistant/rules`, { cache: "no-store" });
   if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-export async function saveAssistantRules(payload: {
-  global_rules: string;
-  chat_rules: string;
-}): Promise<AssistantRules> {
-  const r = await fetch(`${base()}/assistant/rules`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!r.ok) {
-    let detail = await r.text();
-    try {
-      const j = JSON.parse(detail);
-      detail = j.detail ?? detail;
-    } catch {
-      /* keep */
-    }
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
   return r.json();
 }
 
@@ -109,6 +123,15 @@ export type IngestResult = {
   filename: string;
   pages: number;
   chunks: number;
+  ai_summary: ProjectAISummary | null;
+  summary_generated_at: number | null;
+  embedding_provider: "openai";
+};
+
+export type GenerateProjectSummaryResult = {
+  project_id: string;
+  ai_summary: ProjectAISummary;
+  summary_generated_at: number;
 };
 
 export async function ingestProject(file: File, displayName: string): Promise<IngestResult> {
@@ -134,6 +157,23 @@ export async function deleteProject(projectId: string): Promise<void> {
     method: "DELETE",
   });
   if (!r.ok) throw new Error(await r.text());
+}
+
+export async function generateProjectSummary(projectId: string): Promise<GenerateProjectSummaryResult> {
+  const r = await fetch(`${base()}/projects/${encodeURIComponent(projectId)}/summary`, {
+    method: "POST",
+  });
+  if (!r.ok) {
+    let detail = await r.text();
+    try {
+      const j = JSON.parse(detail);
+      detail = j.detail ?? detail;
+    } catch {
+      /* keep raw */
+    }
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return r.json() as Promise<GenerateProjectSummaryResult>;
 }
 
 export type CoverLetterHistorySummary = {
