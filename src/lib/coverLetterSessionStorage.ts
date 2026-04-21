@@ -7,7 +7,6 @@ export type PersistedCoverLetterSession = {
   serverHistoryId: string | null;
   viewingHistoryId: string | null;
   query: string;
-  kChunks: number | "" | null;
   sources: SourceSnippet[];
   draftVersions: DraftVersion[];
   activeVersionId: string | null;
