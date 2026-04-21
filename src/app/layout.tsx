@@ -17,7 +17,7 @@ const display = Fraunces({
 
 export const metadata: Metadata = {
   title: "Portfolio Cover Letter",
-  description: "Grounded cover letters from your project PDFs (Gemini + Pinecone)",
+  description: "Grounded cover letters from your project PDFs (OpenAI + Pinecone)",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
