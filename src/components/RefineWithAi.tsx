@@ -10,7 +10,6 @@ export type RefineAppliedMeta = {
 type RefineWithAiProps = {
   clientQuery: string;
   draft: string;
-  kChunks: number | "";
   formBusy: boolean;
   onApplied: (letter: string, sources: SourceSnippet[], meta: RefineAppliedMeta) => void;
 };
@@ -18,7 +17,6 @@ type RefineWithAiProps = {
 export default function RefineWithAi({
   clientQuery,
   draft,
-  kChunks,
   formBusy,
   onApplied,
 }: RefineWithAiProps) {
@@ -41,13 +39,12 @@ export default function RefineWithAi({
     try {
       const selection =
         typeof window !== "undefined" ? (window.getSelection()?.toString().trim() ?? "") : "";
-      const kk = kChunks === "" ? undefined : Number(kChunks);
       const res = await refineCoverLetter({
         client_query: clientQuery,
         cover_letter: draft,
         instruction: ins,
         selection: selection.length > 0 ? selection.slice(0, 8000) : null,
-        k: kk,
+        k: null,
       });
       onApplied(res.cover_letter, res.sources, { instruction: ins });
     } catch (e) {
@@ -56,7 +53,7 @@ export default function RefineWithAi({
     } finally {
       setRefining(false);
     }
-  }, [clientQuery, draft, instruction, kChunks, onApplied]);
+  }, [clientQuery, draft, instruction, onApplied]);
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
@@ -80,7 +77,7 @@ export default function RefineWithAi({
           type="button"
           disabled={refining || formBusy || instruction.trim().length < 3}
           onClick={() => void applyRefinement()}
-          className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-4 py-2 text-sm font-medium text-[var(--accent)] disabled:opacity-40"
+          className="rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-dim)] px-4 py-2 text-sm font-medium text-[var(--on-accent)] disabled:opacity-40"
         >
           {refining ? "Refining…" : "Apply refinement"}
         </button>
