@@ -19,6 +19,7 @@ import {
 } from "@/lib/coverLetterSessionStorage";
 import type { DraftVersion } from "@/lib/draftVersions";
 import { detailToDraftVersions, versionMenuLabel } from "@/lib/draftVersions";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import LetterDraft from "@/components/LetterDraft";
 import RefineWithAi from "@/components/RefineWithAi";
 import { formatHistoryDate } from "@/lib/format";
@@ -33,6 +34,17 @@ const GENERATE_HINTS = [
 function newId(): string {
   return crypto.randomUUID();
 }
+
+type FlashNotice = { variant: "info" | "error"; message: string };
+
+type ConfirmConfig = {
+  title: string;
+  message: string;
+  variant?: "default" | "danger";
+  confirmLabel?: string;
+  /** Invoked after the dialog is closed from Confirm */
+  onResolved: () => void;
+};
 
 export default function CoverLetterPage() {
   const [projectCount, setProjectCount] = useState(0);
@@ -58,6 +70,8 @@ export default function CoverLetterPage() {
   /** History row id to PATCH on manual save (kept after AI refine clears sidebar highlight) */
   const [serverHistoryId, setServerHistoryId] = useState<string | null>(null);
   const [savingManualVersion, setSavingManualVersion] = useState(false);
+  const [flashNotice, setFlashNotice] = useState<FlashNotice | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
 
   const activeVersion = useMemo(
     () => draftVersions.find((v) => v.id === activeVersionId) ?? null,
@@ -91,6 +105,12 @@ export default function CoverLetterPage() {
       if (genHintTimerRef.current) clearInterval(genHintTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!flashNotice) return;
+    const t = window.setTimeout(() => setFlashNotice(null), flashNotice.variant === "error" ? 12000 : 10000);
+    return () => window.clearTimeout(t);
+  }, [flashNotice]);
 
   const sessionRestoredRef = useRef(false);
   useEffect(() => {
@@ -139,7 +159,18 @@ export default function CoverLetterPage() {
       const target = draftVersions.find((v) => v.id === nextId);
       if (!target) return;
       if (isDirty) {
-        if (!confirm("Discard unsaved edits in the editor and switch to this version?")) return;
+        setConfirmConfig({
+          title: "Discard unsaved edits?",
+          message:
+            "Switching versions will drop changes in the editor that you have not saved as a new version. You can still cancel and stay on the current text.",
+          confirmLabel: "Discard and switch",
+          onResolved: () => {
+            setActiveVersionId(nextId);
+            setEditorValue(target.body);
+            setMarkdownEditorOpen(false);
+          },
+        });
+        return;
       }
       setActiveVersionId(nextId);
       setEditorValue(target.body);
@@ -172,7 +203,10 @@ export default function CoverLetterPage() {
         setViewingHistoryId(serverHistoryId);
         await refresh();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "Could not save to server");
+        setFlashNotice({
+          variant: "error",
+          message: e instanceof Error ? e.message : "Could not save to server",
+        });
       } finally {
         setSavingManualVersion(false);
       }
@@ -184,9 +218,11 @@ export default function CoverLetterPage() {
     setEditorValue(trimmed);
     setMarkdownEditorOpen(false);
     setViewingHistoryId(null);
-    alert(
-      "Saved as a new version locally only. Use Generate cover letter or Open on a history item once so manual saves can sync to MongoDB / the JSON history file."
-    );
+    setFlashNotice({
+      variant: "info",
+      message:
+        "Saved locally as a new version. Generate a letter or open an item from history once so manual saves can sync to your configured history backend.",
+    });
   }, [editorValue, serverHistoryId, refresh]);
 
   async function onGenerate(e: React.FormEvent) {
@@ -258,28 +294,44 @@ export default function CoverLetterPage() {
       setServerHistoryId(d.id);
       setGenErr(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Could not load entry");
+      setFlashNotice({
+        variant: "error",
+        message: e instanceof Error ? e.message : "Could not load that history entry",
+      });
     }
   }
 
-  async function removeHistoryEntry(id: string) {
-    if (!confirm("Delete this saved cover letter from history?")) return;
-    try {
-      await deleteCoverLetterHistoryEntry(id);
-      if (viewingHistoryId === id) {
-        setViewingHistoryId(null);
-      }
-      if (serverHistoryId === id) {
-        setServerHistoryId(null);
-        clearCoverLetterSession();
-      }
-      await refresh();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Delete failed");
-    }
+  function requestDeleteHistoryEntry(id: string) {
+    setConfirmConfig({
+      title: "Delete this draft from history?",
+      message: "It will be removed from the server. If you still need the text, copy it out of the editor first.",
+      variant: "danger",
+      confirmLabel: "Delete",
+      onResolved: () => {
+        void (async () => {
+          try {
+            await deleteCoverLetterHistoryEntry(id);
+            if (viewingHistoryId === id) {
+              setViewingHistoryId(null);
+            }
+            if (serverHistoryId === id) {
+              setServerHistoryId(null);
+              clearCoverLetterSession();
+            }
+            await refresh();
+          } catch (e) {
+            setFlashNotice({
+              variant: "error",
+              message: e instanceof Error ? e.message : "Delete failed",
+            });
+          }
+        })();
+      },
+    });
   }
 
   function startNewDraft() {
+    setFlashNotice(null);
     clearCoverLetterSession();
     setQuery("");
     setDraftVersions([]);
@@ -321,6 +373,19 @@ export default function CoverLetterPage() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col md:flex-row md:items-start">
+      <ConfirmDialog
+        open={confirmConfig !== null}
+        title={confirmConfig?.title ?? ""}
+        message={confirmConfig?.message ?? ""}
+        variant={confirmConfig?.variant === "danger" ? "danger" : "default"}
+        confirmLabel={confirmConfig?.confirmLabel}
+        onCancel={() => setConfirmConfig(null)}
+        onConfirm={() => {
+          const cfg = confirmConfig;
+          setConfirmConfig(null);
+          cfg?.onResolved();
+        }}
+      />
       <aside
         className="order-2 flex w-full max-h-[40vh] shrink-0 flex-col overflow-hidden border-t border-[var(--border)] bg-[var(--surface)] md:order-1 md:max-h-[calc(100vh-3.5rem)] md:w-72 md:border-t-0 md:border-r md:border-b-0 md:sticky md:top-14 lg:w-80"
         aria-label="Cover letter history"
@@ -394,7 +459,7 @@ export default function CoverLetterPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => void removeHistoryEntry(h.id)}
+                          onClick={() => requestDeleteHistoryEntry(h.id)}
                           className={`flex w-11 shrink-0 items-center justify-center border-l outline-none transition focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]/40 ${
                             selected
                               ? "border-[var(--on-accent)]/15 bg-[var(--accent-dim)] text-[var(--on-accent)]/70 hover:bg-red-500/15 hover:text-[var(--danger)]"
@@ -427,6 +492,25 @@ export default function CoverLetterPage() {
       </aside>
 
       <div className="order-1 min-w-0 flex-1 px-4 py-8 sm:px-6 md:order-2">
+        {flashNotice && (
+          <div
+            role={flashNotice.variant === "error" ? "alert" : "status"}
+            className={`mb-6 flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg shadow-black/20 ${
+              flashNotice.variant === "error"
+                ? "border-[var(--danger)]/45 bg-[var(--danger)]/10 text-[var(--danger)]"
+                : "border-[var(--accent)]/35 bg-[var(--accent-dim)] text-[var(--on-accent)]"
+            }`}
+          >
+            <p className="min-w-0 flex-1 whitespace-pre-wrap leading-relaxed">{flashNotice.message}</p>
+            <button
+              type="button"
+              onClick={() => setFlashNotice(null)}
+              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium opacity-80 transition hover:bg-white/10 hover:opacity-100"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <header className="mb-8 border-b border-[var(--border)] pb-6">
           <h1 className="headline text-2xl font-semibold tracking-tight sm:text-3xl">Cover letter</h1>
           <p className="mt-2 text-[var(--muted)]">
@@ -601,11 +685,13 @@ export default function CoverLetterPage() {
                       logClientApiError("cover letter page: persist refine to history", e, {
                         serverHistoryId,
                       });
-                      alert(
-                        e instanceof Error
-                          ? `${e.message} — draft updated locally only.`
-                          : "Could not save refine to server; draft updated locally only."
-                      );
+                      setFlashNotice({
+                        variant: "error",
+                        message:
+                          e instanceof Error
+                            ? `${e.message} — draft updated locally only.`
+                            : "Could not save refine to server; draft updated locally only.",
+                      });
                     }
                   }
                   setDraftVersions((prev) => [
