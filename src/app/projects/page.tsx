@@ -50,6 +50,7 @@ export default function ProjectsPage() {
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [libraryRefreshing, setLibraryRefreshing] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -61,7 +62,8 @@ export default function ProjectsPage() {
   const ingestTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (mode: "silent" | "explicit" = "silent") => {
+    if (mode === "explicit") setLibraryRefreshing(true);
     setLoadErr(null);
     try {
       const [p, i] = await Promise.all([fetchProjects(), fetchServerInfo()]);
@@ -69,6 +71,8 @@ export default function ProjectsPage() {
       setInfo(i);
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : "Failed to load API");
+    } finally {
+      if (mode === "explicit") setLibraryRefreshing(false);
     }
   }, []);
 
@@ -318,7 +322,7 @@ export default function ProjectsPage() {
         </section>
 
         <section className="border-t border-[var(--border)] pt-10" aria-labelledby="library-heading">
-          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 id="library-heading" className="text-lg font-semibold text-[var(--text)]">
                 Your library
@@ -329,6 +333,14 @@ export default function ProjectsPage() {
                   : `${projects.length} indexed project${projects.length === 1 ? "" : "s"} ready for cover-letter retrieval.`}
               </p>
             </div>
+            <button
+              type="button"
+              disabled={libraryRefreshing}
+              onClick={() => void refresh("explicit")}
+              className="shrink-0 self-start rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text)] transition hover:border-[var(--accent)]/40 hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {libraryRefreshing ? "Syncing…" : "Refresh list"}
+            </button>
           </div>
 
           {projects.length === 0 ? (
