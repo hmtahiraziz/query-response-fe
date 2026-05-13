@@ -153,7 +153,15 @@ export default function ProjectDetailPage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-        <p className="text-sm text-[var(--muted)]">Loading project…</p>
+        <div className="mb-6 h-4 w-40 animate-pulse rounded bg-[var(--border)]/70" />
+        <div className="mb-4 h-9 max-w-xl animate-pulse rounded-lg bg-[var(--border)]/50" />
+        <div className="h-4 max-w-md animate-pulse rounded bg-[var(--border)]/40" />
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          <div className="h-24 animate-pulse rounded-xl border border-[var(--border)]/50 bg-[var(--surface)]/40" />
+          <div className="h-24 animate-pulse rounded-xl border border-[var(--border)]/50 bg-[var(--surface)]/40" />
+          <div className="h-24 animate-pulse rounded-xl border border-[var(--border)]/50 bg-[var(--surface)]/40 sm:col-span-2" />
+        </div>
+        <p className="sr-only">Loading project</p>
       </div>
     );
   }
